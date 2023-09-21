@@ -17,7 +17,8 @@ n_jobs=16      # number of parallel jobs in feature extraction
 conf=conf/hifigan_hubert_duration.v1.yaml
 
 # directory path setting
-db_root=/usr0/home/jiatongs/data/cvss/es_en-c # direcotry including wavfiles (MODIFY BY YOURSELF)
+# db_root=/usr0/home/jiatongs/data/cvss/es_en-c # direcotry including wavfiles (MODIFY BY YOURSELF)
+db_root=/ocean/projects/cis210027p/zzhou5/espnet/egs2/cvss/s2st1/downloads/es_en-c
                           # each wav filename in the directory should be unique
                           # e.g.
                           # /path/to/database
@@ -41,7 +42,23 @@ train_set="train"       # name of training data directory
 dev_set="dev"           # name of development data direcotry
 eval_set="test"         # name of evaluation data direcotry
 
-hubert_text=""
+hubert_text="hubert_text"
+
+transform_lines() {
+    local input_file="$1"
+    local output_file="$2"
+
+    # Process the file with awk
+    awk '{ 
+        split($1, parts, "-");
+        printf "%s.mp3", parts[2];
+        for(i=2; i<=NF; i++) {
+            printf " %s", $i;
+        }
+        printf "\n";
+    }' "$input_file" > "$output_file"
+}
+
 
 # shellcheck disable=SC1091
 . utils/parse_options.sh || exit 1;
@@ -78,12 +95,17 @@ EOF
         [ ! -e "${dumpdir}/${name}/raw" ] && mkdir -p "${dumpdir}/${name}/raw"
         echo "Feature extraction start. See the progress via ${dumpdir}/${name}/raw/preprocessing.*.log."
         utils/make_subset_data.sh "data/${name}" "${n_jobs}" "${dumpdir}/${name}/raw"
+
+        # Call the transformation function
+        transformed_file="${hubert_text}/${name}_hubert_transformed.en"
+        transform_lines "${hubert_text}/${name}_hubert.en" "$transformed_file"
+
         ${train_cmd} JOB=1:${n_jobs} "${dumpdir}/${name}/raw/preprocessing.JOB.log" \
             local/preprocess_hubert.py \
                 --config "${conf}" \
                 --scp "${dumpdir}/${name}/raw/wav.JOB.scp" \
                 --dumpdir "${dumpdir}/${name}/raw/dump.JOB" \
-                --text "${hubert_text}" \
+                --text "$transformed_file" \
                 --verbose "${verbose}"
         echo "Successfully finished feature extraction of ${name} set."
     ) &
